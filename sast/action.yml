@@ -1,0 +1,30 @@
+name: sast
+description: Scan the code with Semgrep CE. On a pull request or a push, only new findings fail the step.
+inputs:
+  rules:
+    description: URL of the Semgrep rules.
+    default: https://semgrep.dev/c/p/default
+  baseline:
+    description: Commit to compare with. The default is the pull request base, or the commit before the push. Empty on other events, which scans all the code.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        RULES: ${{ inputs.rules }}
+        BASELINE: ${{ inputs.baseline }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      run: |
+        set -euo pipefail
+        source "$GITHUB_ACTION_PATH/../lib/baseline.sh"
+        rules="$RUNNER_TEMP/semgrep-rules.yml"
+        curl --fail --silent --show-error --location --retry 3 "$RULES" --output "$rules"
+        # The rules are fetched first, so the scan runs with no network.
+        docker run --rm --network none \
+          --volume "$PWD:/src" --volume "$rules:/rules.yml:ro" --workdir /src \
+          --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env GIT_CONFIG_VALUE_0='*' \
+          semgrep/semgrep:1.185.0 \
+          semgrep scan --config /rules.yml ${base:+--baseline-commit "$base"} \
+          --error --disable-nosem --metrics off --disable-version-check --quiet

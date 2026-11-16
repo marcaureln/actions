@@ -1,0 +1,24 @@
+name: secrets-scan
+description: Scan the new commits with TruffleHog. Fails only on a secret that its provider confirms as live.
+inputs:
+  baseline:
+    description: Commit to start after. The default is the pull request base, or the commit before the push. Empty on other events, which scans all the history.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        BASELINE: ${{ inputs.baseline }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+      run: |
+        set -euo pipefail
+        source "$GITHUB_ACTION_PATH/../lib/baseline.sh"
+        # The image's entrypoint script splits its last argument through a shell, so the step calls the binary directly.
+        docker run --rm \
+          --volume "$PWD:/src:ro" \
+          --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory --env GIT_CONFIG_VALUE_0='*' \
+          --entrypoint /usr/bin/trufflehog \
+          trufflesecurity/trufflehog:3.95.8 \
+          git file:///src ${base:+--since-commit "$base"} --branch HEAD --results=verified --fail --no-update

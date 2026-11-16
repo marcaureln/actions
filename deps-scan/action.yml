@@ -1,0 +1,23 @@
+name: deps-scan
+description: Scan the lockfiles with Grype. Fails on a vulnerability that has a fix, at or above the given severity.
+inputs:
+  path:
+    description: Folder to scan, relative to the workspace.
+    default: "."
+  fail-on:
+    description: Lowest severity that fails the step (negligible, low, medium, high, critical).
+    default: high
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -euo pipefail
+        docker run --rm \
+          --volume "$PWD/$SCAN_PATH:/src:ro" \
+          --env GRYPE_CHECK_FOR_APP_UPDATE=false \
+          anchore/grype:v0.121.0 \
+          dir:/src --only-fixed --fail-on "$FAIL_ON"
